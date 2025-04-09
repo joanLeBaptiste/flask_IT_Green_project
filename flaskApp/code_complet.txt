@@ -1,0 +1,2045 @@
+﻿
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\core\config.py -----
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# RÃ©sout le chemin absolu de la base
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sqlite_relative_path = os.getenv("DATABASE_PATH", "sqlite/site.db")
+SQLITE_ABS_PATH = os.path.abspath(os.path.join(BASE_DIR, sqlite_relative_path))
+
+class Config:
+    SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_key')
+    SQLALCHEMY_DATABASE_URI = f"sqlite:///{SQLITE_ABS_PATH}"
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\core\__init__.py -----
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\models\db.py -----
+# models/models.py
+from flask_login import UserMixin
+from datetime import datetime
+from . import db
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(50), default='user')  # Par dÃ©faut, le rÃ´le est 'user'
+
+    def is_admin(self):
+        return self.role == 'admin'
+
+    def check_password(self, password):
+        return self.password == password
+
+class Service(db.Model):
+    id_service = db.Column(db.Integer, primary_key=True)
+    nom_service = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(2000), nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    picture_path = db.Column(db.String(255), nullable=True)
+    categorie = db.Column(db.String(120), nullable=False)
+    niveau = db.Column(db.String(50), nullable=True)  # ex: basique, avancÃ©, expert
+
+    def __repr__(self):
+        return f"<Service {self.nom_service} - {self.categorie}>"
+
+class Cart(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    session_id = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('carts', lazy=True))
+    items = db.relationship('CartItem', backref='cart', lazy=True, cascade="all, delete-orphan")
+
+class CartItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    cart_id = db.Column(db.Integer, db.ForeignKey('cart.id'), nullable=False)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id_service'), nullable=False)
+    quantity = db.Column(db.Integer, default=1, nullable=False)
+
+    service = db.relationship('Service', backref=db.backref('cart_items', lazy=True))
+
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\models\__init__.py -----
+# models/__init__.py
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\routes\account.py -----
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask_login import login_required, current_user
+from models.db import db, User
+
+bp = Blueprint('account', __name__, url_prefix='/account')
+
+
+@bp.route('/', methods=['GET', 'POST'])
+@login_required  # âœ… protÃ¨ge l'accÃ¨s Ã  la route
+def account():
+    user = current_user  # âœ… rÃ©cupÃ¨re l'utilisateur connectÃ©
+
+    if request.method == 'POST':
+        new_username = request.form.get('username')
+
+        if new_username and new_username != user.username:
+            user.username = new_username
+            db.session.commit()
+            flash('Username updated successfully.', 'success')
+        else:
+            flash('No changes were made.', 'info')
+
+    return render_template('account.html', user=user)
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\routes\auth.py -----
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from flask_login import login_user, current_user, logout_user
+from models.db import db, User, Cart, CartItem
+from routes.panier import get_or_create_cart
+import uuid
+
+bp = Blueprint('auth', __name__, url_prefix='/auth')
+
+
+@bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+
+        if user and user.check_password(password):
+            login_user(user)
+
+            # GÃ©nÃ©rer un nouveau session_id
+            session_id = str(uuid.uuid4())
+            session['session_id'] = session_id
+
+            # ðŸ”„ RÃ©cupÃ©rer ou fusionner le panier utilisateur/session
+            get_or_create_cart()  # âœ… AJOUT ACTIF
+
+            flash('Login successful!', 'success')
+            return redirect(url_for('main.index'))
+
+        flash('Invalid username or password', 'danger')
+
+    return render_template('login.html')
+
+
+@bp.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        # VÃ©rifie si le nom d'utilisateur est dÃ©jÃ  pris
+        if User.query.filter_by(username=username).first():
+            flash('Ce nom dâ€™utilisateur est dÃ©jÃ  utilisÃ©. Choisissez-en un autre.', 'danger')
+            return redirect(url_for('auth.register'))
+
+        new_user = User(username=username, password=password)
+        db.session.add(new_user)
+        db.session.commit()
+
+        login_user(new_user)
+
+        session_id = str(uuid.uuid4())
+        session['session_id'] = session_id
+        get_or_create_cart()
+
+        flash('Inscription rÃ©ussie ! Vous Ãªtes maintenant connectÃ©.', 'success')
+        return redirect(url_for('main.index'))
+
+    return render_template('register.html')
+
+@bp.route('/logout')
+def logout():
+    # Nettoyage de session
+    session.pop('session_id', None)
+    session.pop('cart_id', None)
+
+    logout_user()
+
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('main.index'))
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\routes\chatbot.py -----
+from flask import Blueprint, request, jsonify, session
+from flask_login import current_user
+from openai import OpenAI
+from core.config import Config
+
+bp = Blueprint('chatbot', __name__, url_prefix='/chatbot')
+
+client = OpenAI(api_key=Config.OPENAI_API_KEY)
+
+# Message de rÃ´le : envoyÃ© une seule fois au dÃ©but de la conversation
+SYSTEM_PROMPT = {
+    "role": "system",
+    "content": (
+        "Tu es un assistant spÃ©cialisÃ© dans l'Ã©cologie numÃ©rique et la consommation Ã©nergÃ©tique de l'intelligence artificielle. "
+        "Ta mission est d'aider les utilisateurs Ã  comprendre l'impact environnemental de l'IA, Ã  optimiser leur consommation, "
+        "et Ã  adopter une stratÃ©gie IA plus responsable et Ã©thique. Sois clair, synthÃ©tique, professionnel, et orientÃ© solution."
+    )
+}
+
+
+@bp.route('/', methods=['POST'])
+def chatbot():
+    user_message = request.json.get('message')
+    sender_id = str(current_user.id) if current_user.is_authenticated else "guest"
+    print(f"Sender: {sender_id} | Message: {user_message}")
+
+    # Initialise le contexte dans la session si ce nâ€™est pas dÃ©jÃ  fait
+    if 'chat_history' not in session:
+        session['chat_history'] = [SYSTEM_PROMPT]
+
+    # Ajoute le message utilisateur dans le contexte
+    session['chat_history'].append({
+        "role": "user",
+        "content": user_message
+    })
+
+    try:
+        # Envoie tout l'historique Ã  l'API OpenAI
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=session['chat_history']
+        )
+
+        # RÃ©cupÃ¨re la rÃ©ponse du bot
+        bot_reply = response.choices[0].message.content
+
+        # Ajoute la rÃ©ponse du bot Ã  lâ€™historique
+        session['chat_history'].append({
+            "role": "assistant",
+            "content": bot_reply
+        })
+
+        # Flask sauvegarde la session automatiquement si elle est modifiÃ©e
+        return jsonify({"response": bot_reply})
+
+    except Exception as e:
+        print(f"Erreur OpenAI: {e}")
+        return jsonify({"error": "Erreur de communication avec le chatbot."}), 500
+
+
+@bp.route('/session')
+def session_data():
+    return jsonify(session.get('chat_history', []))
+
+
+@bp.route('/reset', methods=['POST'])
+def reset_chat():
+    session.pop("chat_history", None)
+    return jsonify({"status": "reset"})
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\routes\main.py -----
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from models.db import Service, db  # <-- remplace Product par Service
+import os
+from flask_login import login_required, current_user
+from functools import wraps
+from werkzeug.utils import secure_filename
+from flask import send_from_directory
+
+bp = Blueprint('main', __name__, url_prefix='/')
+
+
+@bp.route('/')
+def index():
+    return render_template('index.html')
+
+
+@bp.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory('static/uploads', filename)
+
+
+@bp.route('/services')  # <-- anciennement /produit
+def services():
+    services = Service.query.all()
+    return render_template('services.html', services=services)
+
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_admin():
+            flash('You do not have permission to access this page.', 'error')
+            return redirect(url_for('main.index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+@bp.route('/add_service', methods=['GET', 'POST'])  # <-- anciennement /add
+@login_required
+@admin_required
+def add_service():
+    if request.method == 'POST':
+        nom_service = request.form['nom_service']
+        description = request.form['description']
+        categorie = request.form['categorie']
+        price = request.form['price']
+        niveau = request.form.get('niveau')
+
+        if not nom_service or not description or not categorie or not price:
+            flash('All fields except image are required.', 'error')
+            return redirect(url_for('main.add_service'))
+
+        picture_path = None
+        if 'picture' in request.files:
+            file = request.files['picture']
+            if file.filename != '':
+                filename = secure_filename(file.filename)
+                picture_path = os.path.join('uploads', filename)
+                file.save(os.path.join('static', picture_path))
+
+        new_service = Service(
+            nom_service=nom_service,
+            description=description,
+            picture_path=picture_path,
+            categorie=categorie,
+            niveau=niveau,
+            price=float(price)
+        )
+
+        db.session.add(new_service)
+        db.session.commit()
+
+        flash('Service added successfully!', 'success')
+        return redirect(url_for('main.add_service'))
+
+    return render_template('add_service.html')
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\routes\panier.py -----
+import uuid
+from flask import Blueprint, session, redirect, url_for, render_template, flash
+from models.db import db, Cart, CartItem, Service
+from flask_login import current_user, login_required
+
+bp = Blueprint('panier', __name__, url_prefix='/panier')
+
+
+@bp.route('/add/<int:service_id>', methods=['POST'])  # anciennement product_id
+def add_to_cart(service_id):
+    service = Service.query.get_or_404(service_id)
+    cart = get_or_create_cart()
+
+    item = CartItem.query.filter_by(cart_id=cart.id, service_id=service.id_service).first()
+    if item:
+        item.quantity += 1
+    else:
+        item = CartItem(cart_id=cart.id, service_id=service.id_service)
+        db.session.add(item)
+
+    db.session.commit()
+    flash('Service added to cart.', 'success')
+    return redirect(url_for('main.index'))
+
+
+@bp.route('/view')
+def view_cart():
+    cart = get_or_create_cart()
+    return render_template('panier.html', cart=cart)
+
+
+def get_or_create_cart():
+    session_id = session.get('session_id')
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        session['session_id'] = session_id
+
+    cart = Cart.query.filter_by(session_id=session_id).first()
+
+    if current_user.is_authenticated:
+        user_cart = Cart.query.filter_by(user_id=current_user.id).first()
+        if user_cart:
+            cart = user_cart
+            cart.session_id = session_id
+            db.session.commit()
+
+            session_cart = Cart.query.filter_by(session_id=session_id).first()
+            if session_cart and session_cart.id != cart.id:
+                for item in session_cart.items:
+                    existing_item = CartItem.query.filter_by(cart_id=cart.id, service_id=item.service_id).first()
+                    if existing_item:
+                        existing_item.quantity += item.quantity
+                    else:
+                        new_item = CartItem(cart_id=cart.id, service_id=item.service_id, quantity=item.quantity)
+                        db.session.add(new_item)
+
+                db.session.delete(session_cart)
+                db.session.commit()
+        elif cart:
+            cart.user_id = current_user.id
+            db.session.commit()
+        else:
+            cart = Cart(user_id=current_user.id, session_id=session_id)
+            db.session.add(cart)
+            db.session.commit()
+    elif not cart:
+        cart = Cart(session_id=session_id)
+        db.session.add(cart)
+        db.session.commit()
+
+    session['cart_id'] = cart.id
+    return cart
+
+
+@bp.route('/remove/<int:item_id>', methods=['POST'])
+def remove_from_cart(item_id):
+    item = CartItem.query.get_or_404(item_id)
+    cart = get_or_create_cart()
+
+    if item.cart_id == cart.id:
+        db.session.delete(item)
+        db.session.commit()
+        flash('Service removed from cart.', 'success')
+    else:
+        flash('Error: Item not found in your cart.', 'danger')
+
+    return redirect(url_for('panier.view_cart'))
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\routes\__init__.py -----
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\JavaScript\chatbot.js -----
+
+// SCRIPT RESERVE POURLE CHATBOT
+function sendMessage() {
+    var userInput = document.getElementById("user-input").value.trim();
+    if (!userInput) return;
+
+    var chatLog = document.getElementById("chat-log");
+    chatLog.innerHTML += "<p><strong>User:</strong> " + userInput + "</p>";
+    document.getElementById("user-input").value = "";
+
+    fetch('/chatbot', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: userInput })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const botMessage = data.response || data.error || "No response";
+        chatLog.innerHTML += "<p><strong>Chatbot:</strong> " + botMessage + "</p>";
+        chatLog.scrollTop = chatLog.scrollHeight;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        chatLog.innerHTML += "<p><strong>Chatbot:</strong> Erreur de connexion.</p>";
+    });
+}
+
+function toggleChat() {
+    var chatContainer = document.getElementById("chat-container");
+    var toggleButton = document.getElementById("toggle-chat");
+    if (chatContainer.style.display === "none" || chatContainer.style.display === "") {
+        chatContainer.style.display = "flex";
+        toggleButton.textContent = "-";
+    } else {
+        chatContainer.style.display = "none";
+        toggleButton.textContent = "ðŸ’¬";
+    }
+}
+
+function resetChat() {
+    // Efface le chat log cÃ´tÃ© client
+    const chatLog = document.getElementById('chat-log');
+    chatLog.innerHTML = "";
+
+    // Efface aussi le contexte cÃ´tÃ© serveur
+    fetch("/chatbot/reset", {
+        method: "POST"
+    }).then(() => {
+        chatLog.innerHTML += `<p class="bot-message"><em>Le chatbot a Ã©tÃ© rÃ©initialisÃ©.</em></p>`;
+    });
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\account.css -----
+/* ===== PAGE MON COMPTE ===== */
+form.account-form {
+    max-width: 450px;
+    margin: 50px auto;
+    padding: 30px;
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+form.account-form label {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1f2937;
+}
+
+form.account-form input {
+    padding: 12px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 15px;
+    transition: all 0.2s ease-in-out;
+}
+
+form.account-form input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+form.account-form button {
+    background-color: #2563eb;
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s ease;
+}
+
+form.account-form button:hover {
+    background-color: #1e40af;
+    transform: scale(1.02);
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\add_service.css -----
+/* ===== FORMULAIRE D'AJOUT DE SERVICE (admin) ===== */
+form.add-service-form {
+    max-width: 600px;
+    margin: 50px auto;
+    padding: 35px;
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+form.add-service-form label {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1f2937;
+}
+
+form.add-service-form input,
+form.add-service-form textarea,
+form.add-service-form select {
+    padding: 12px;
+    font-size: 15px;
+    border-radius: 10px;
+    border: 1.5px solid #d1d5db;
+    transition: all 0.2s ease-in-out;
+}
+
+form.add-service-form input:focus,
+form.add-service-form textarea:focus,
+form.add-service-form select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+form.add-service-form textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+form.add-service-form input[type="file"] {
+    border: none;
+    padding-left: 0;
+}
+
+form.add-service-form button {
+    background-color: #10b981;
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s ease;
+}
+
+form.add-service-form button:hover {
+    background-color: #059669;
+    transform: scale(1.02);
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\cart.css -----
+/* ===== Panier Styles Pro ===== */
+.cart-container {
+    max-width: 700px;
+    margin: 60px auto;
+    padding: 30px;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    text-align: left;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.cart-container h1 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #1e3a8a;
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+/* ===== Liste ===== */
+.cart-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.cart-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f1f5f9;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cart-item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.product-name {
+    font-size: 18px;
+    font-weight: 500;
+    color: #111827;
+}
+
+.quantity {
+    font-size: 15px;
+    color: #4b5563;
+    margin-left: 10px;
+}
+
+/* ===== Bouton remove ===== */
+.remove-button {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+}
+
+.remove-button:hover {
+    background-color: #dc2626;
+}
+
+/* ===== Panier vide ===== */
+.empty-cart {
+    text-align: center;
+    font-size: 20px;
+    color: #9ca3af;
+    margin-top: 30px;
+}
+
+/* ===== Continuer achat ===== */
+.continue-shopping {
+    display: block;
+    margin: 30px auto 0;
+    padding: 12px 24px;
+    background: #2563eb;
+    color: white;
+    text-decoration: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    text-align: center;
+    width: fit-content;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.continue-shopping:hover {
+    background: #1e40af;
+    transform: scale(1.03);
+}
+
+/* ===== Anim ===== */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
+    .cart-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .remove-button {
+        align-self: flex-end;
+    }
+
+    .cart-container {
+        padding: 20px;
+        margin: 30px 15px;
+    }
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\index.css -----
+/* === Global === */
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(to bottom right, #f0f4f8, #ffffff);
+    margin: 0;
+    padding: 0;
+    color: #1f2937;
+}
+
+/* === HERO SECTION === */
+.hero-section {
+    padding: 80px 20px 40px;
+    text-align: center;
+    background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+    color: white;
+    border-radius: 0 0 40px 40px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.hero-content {
+    max-width: 800px;
+    margin: auto;
+    animation: fadeInUp 0.6s ease-in-out;
+}
+
+.hero-content .title {
+    font-size: 38px;
+    font-weight: 700;
+    margin-bottom: 20px;
+}
+
+.highlight {
+    color: #bbf7d0;
+}
+
+.intro {
+    font-size: 18px;
+    max-width: 650px;
+    margin: 0 auto 30px;
+    line-height: 1.6;
+}
+
+/* === CTA BUTTON === */
+.view-products-link {
+    background-color: #22c55e;
+    color: white;
+    padding: 14px 28px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.view-products-link:hover {
+    background-color: #16a34a;
+    transform: translateY(-2px);
+}
+
+/* === SERVICE CARDS === */
+.services-highlight {
+    padding: 50px 20px;
+    text-align: center;
+}
+
+.product-container {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    flex-wrap: wrap;
+    margin-bottom: 30px;
+}
+
+.product {
+    width: 260px;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.product:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+}
+
+.product img {
+    width: 100%;
+    height: 150px;
+    object-fit: contain;
+    margin-bottom: 16px;
+}
+
+.product h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+    color: #111827;
+}
+
+.product p {
+    font-size: 14px;
+    color: #4b5563;
+}
+
+/* === CLOSING TEXT === */
+.closing {
+    max-width: 600px;
+    margin: 0 auto;
+    font-size: 16px;
+    color: #374151;
+    line-height: 1.6;
+}
+
+/* === CHATBOT CONTAINER === */
+#chat-container {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 320px;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(15px);
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+    z-index: 999;
+    animation: fadeInUp 0.4s ease;
+}
+
+#chat-header {
+    background: #22c55e;
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+#chat-header button {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 4px 8px;
+    transition: background 0.2s;
+}
+
+#chat-header button:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* === CHAT LOG === */
+#chat-log {
+    padding: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #f9fafb;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#chat-log p {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 10px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-message {
+    background: #3b82f6;
+    color: white;
+    align-self: flex-end;
+}
+
+.bot-message {
+    background-color: #e5e7eb;
+    color: #111827;
+    padding: 8px 12px;
+    margin: 6px 0;
+    border-radius: 8px;
+    text-align: left;
+}
+
+.bot-message em {
+    color: #6b7280;
+    font-style: italic;
+}
+
+/* === CHAT INPUT === */
+.chat-input-group {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 8px;
+    background: white;
+}
+
+#user-input {
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    font-size: 14px;
+    outline: none;
+}
+
+.chat-input-group button {
+    background-color: #2563eb;
+    color: white;
+    font-weight: 600;
+    padding: 10px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.chat-input-group button:hover {
+    background-color: #1d4ed8;
+}
+
+/* === CHAT TOGGLE BUTTON === */
+#toggle-chat {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 52px;
+    height: 52px;
+    background-color: #22c55e;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 22px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+    z-index: 9999;
+}
+
+#toggle-chat:hover {
+    transform: scale(1.1);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+    .product-container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .product {
+        width: 90%;
+    }
+
+    #chat-container {
+        width: 90%;
+        right: 5%;
+    }
+
+    .hero-content .title {
+        font-size: 28px;
+    }
+
+    .intro {
+        font-size: 16px;
+    }
+}
+
+/* === ANIMATIONS === */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\login.css -----
+/* ===== FORMULAIRES (login/register) ===== */
+form {
+    max-width: 450px;
+    margin: 40px auto;
+    padding: 30px;
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    animation: fadeIn 0.5s ease;
+}
+
+form label {
+    font-weight: 500;
+    font-size: 15px;
+    color: #374151;
+}
+
+form input {
+    padding: 12px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 15px;
+    transition: border-color 0.3s;
+}
+
+form input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+form button {
+    background-color: #2563eb;
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.25s ease, transform 0.2s ease;
+}
+
+form button:hover {
+    background-color: #1e40af;
+    transform: scale(1.02);
+}
+
+form + p {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 14px;
+    color: #4b5563;
+}
+
+form + p a {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+form + p a:hover {
+    text-decoration: underline;
+}
+
+/* === Messages flash === */
+.flashes {
+    max-width: 450px;
+    margin: 0 auto 20px;
+    padding: 0;
+    list-style: none;
+}
+
+.flash-success {
+    background-color: #d1fae5;
+    color: #065f46;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.flash-error,
+.flash-danger {
+    background-color: #fee2e2;
+    color: #991b1b;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+/* === Animation === */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(15px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\productStyle.css -----
+/* ===== Base ===== */
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f3f4f6;
+    margin: 0;
+    padding: 0;
+}
+
+h1 {
+    text-align: center;
+    margin: 40px 0 30px;
+    font-size: 32px;
+    font-weight: 600;
+    color: #1e3a8a;
+}
+
+/* ===== Grid produits ===== */
+.product-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 25px;
+    padding: 20px;
+}
+
+/* ===== Carte produit ===== */
+.product-card {
+    display: flex;
+    align-items: center;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px;
+    width: 90%;
+    max-width: 850px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+    transition: all 0.2s ease-in-out;
+    animation: fadeInUp 0.4s ease;
+}
+
+.product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
+}
+
+/* ===== Image produit ===== */
+.product-card img {
+    width: 130px;
+    height: 130px;
+    object-fit: cover;
+    border-radius: 12px;
+    margin-right: 20px;
+    background-color: #e5e7eb;
+}
+
+/* ===== Infos produit ===== */
+.product-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.product-info h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    color: #111827;
+}
+
+.product-info p {
+    font-size: 15px;
+    color: #4b5563;
+    margin: 2px 0;
+}
+
+.product-info strong {
+    color: #1e3a8a;
+}
+
+/* ===== Bouton panier ===== */
+.add-to-cart-button {
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    margin-top: 10px;
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.add-to-cart-button:hover {
+    background-color: #1e40af;
+    transform: scale(1.03);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 700px) {
+    .product-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .product-card img {
+        margin: 0 0 15px;
+    }
+
+    .product-info {
+        align-items: center;
+    }
+}
+
+/* ===== Anim ===== */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\register.css -----
+/* ===== FORMULAIRES (login/register) ===== */
+form {
+    max-width: 450px;
+    margin: 40px auto;
+    padding: 30px;
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    animation: fadeIn 0.5s ease;
+}
+
+form label {
+    font-weight: 500;
+    font-size: 15px;
+    color: #374151;
+}
+
+form input {
+    padding: 12px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 15px;
+    transition: border-color 0.3s;
+}
+
+form input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+/* === Bouton submit === */
+form button {
+    background-color: #2563eb;
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.25s ease, transform 0.2s ease;
+}
+
+form button:hover {
+    background-color: #1e40af;
+    transform: scale(1.02);
+}
+
+/* === Lien login === */
+form + p {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 14px;
+    color: #4b5563;
+}
+
+form + p a {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+form + p a:hover {
+    text-decoration: underline;
+}
+
+/* === Messages flash === */
+.flashes {
+    max-width: 450px;
+    margin: 0 auto 20px;
+    padding: 0;
+    list-style: none;
+}
+
+.flash-success {
+    background-color: #d1fae5;
+    color: #065f46;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.flash-error,
+.flash-danger {
+    background-color: #fee2e2;
+    color: #991b1b;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+/* === Animation === */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(15px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\static\styles.css -----
+/* ===== Reset & Base ===== */
+
+header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: linear-gradient(135deg, #2563eb, #1e3a8a);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Navbar container */
+.navbar {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Logo */
+.logo a {
+    color: white;
+    font-size: 20px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: opacity 0.3s ease;
+}
+
+.logo a:hover {
+    opacity: 0.85;
+}
+
+/* Links */
+.nav-links {
+    display: flex;
+    gap: 20px;
+}
+
+.nav-links a {
+    color: white;
+    text-decoration: none;
+    font-size: 15px;
+    padding: 8px 16px;
+    border-radius: 30px;
+    transition: background-color 0.3s, transform 0.2s ease-in-out;
+    font-weight: 500;
+}
+
+.nav-links a:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f2f4f8;
+    color: #2c3e50;
+    height: 100%;
+}
+
+/* ===== Header ===== */
+header {
+    background: linear-gradient(135deg, #2563eb, #1e3a8a);
+    color: white;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+header nav {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+header nav a {
+    color: white;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 10px 18px;
+    border-radius: 30px;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: all 0.25s ease-in-out;
+}
+
+header nav a:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+/* ===== Main Content ===== */
+.main-content {
+    max-width: 1100px;
+    margin: 50px auto;
+    padding: 30px;
+    background-color: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    text-align: center;
+}
+
+.title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 15px;
+}
+
+.intro, .closing {
+    font-size: 17px;
+    color: #555;
+    margin-bottom: 30px;
+    line-height: 1.6;
+}
+
+/* ===== Product Section ===== */
+.product-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 30px;
+}
+
+.product {
+    width: 260px;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    transition: all 0.2s ease-in-out;
+}
+
+.product:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+.product img {
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    margin-bottom: 15px;
+}
+
+.product h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.product p {
+    font-size: 15px;
+    color: #666;
+}
+
+/* ===== Chatbot ===== */
+#chat-container {
+    position: fixed;
+    bottom: 60px;
+    right: 25px;
+    width: 340px;
+    height: 450px;
+    display: none;
+    flex-direction: column;
+    background-color: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    z-index: 1000;
+}
+
+#chat-log {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 16px;
+    background-color: #f1f5f9;
+}
+
+#chat-log p {
+    margin: 10px 0;
+    padding: 10px 14px;
+    border-radius: 12px;
+    max-width: 80%;
+    line-height: 1.5;
+}
+
+.user-message {
+    background-color: #2563eb;
+    color: white;
+    align-self: flex-end;
+}
+
+.bot-message {
+    background-color: #e2e8f0;
+    color: #2d3748;
+    align-self: flex-start;
+}
+
+#user-input {
+    border: 2px solid #cbd5e0;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 12px 16px;
+    font-size: 15px;
+    width: calc(100% - 32px);
+}
+
+#chat-container button {
+    background-color: #2563eb;
+    color: white;
+    font-weight: bold;
+    border: none;
+    padding: 12px;
+    margin: 0 16px 16px;
+    border-radius: 12px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+#chat-container button:hover {
+    background-color: #1e40af;
+}
+
+#toggle-chat {
+    position: fixed;
+    bottom: 15px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    background-color: #2563eb;
+    color: white;
+    font-size: 22px;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 1001;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+}
+
+#toggle-chat:hover {
+    transform: scale(1.1);
+}
+
+/* ===== Footer ===== */
+footer {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    color: white;
+    text-align: center;
+    padding: 14px;
+    font-size: 14px;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+}
+
+footer a {
+    color: #dbeafe;
+    text-decoration: none;
+    margin: 0 8px;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+    header nav {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .main-content {
+        margin: 30px 15px;
+        padding: 20px;
+    }
+
+    .product {
+        width: 90%;
+    }
+
+    #chat-container {
+        width: 90%;
+        right: 5%;
+        height: 420px;
+    }
+}
+main.container {
+    padding: 50px 20px 80px;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\account.html -----
+{% extends "layout.html" %}
+
+{% block title %}Mon compte{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='account.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="title">Mon compte</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+        <li class="flash-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+<form action="{{ url_for('account.account') }}" method="POST" class="account-form">
+    <label for="username">Nom d'utilisateur :</label>
+    <input type="text" id="username" name="username" value="{{ user.username }}" required>
+    <button type="submit">Mettre Ã  jour</button>
+</form>
+{% endblock %}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\add_service.html -----
+{% extends "layout.html" %}
+
+{% block title %}Ajouter un Service{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='add_service.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="title">Ajouter un service</h2>
+
+<form action="{{ url_for('main.add_service') }}" method="POST" enctype="multipart/form-data" class="add-service-form">
+    <label for="nom_service">Nom du service :</label>
+    <input type="text" id="nom_service" name="nom_service" required>
+
+    <label for="description">Description :</label>
+    <textarea id="description" name="description" required></textarea>
+
+    <label for="categorie">CatÃ©gorie :</label>
+    <input type="text" id="categorie" name="categorie" required>
+
+    <label for="niveau">Niveau :</label>
+    <select id="niveau" name="niveau">
+        <option value="">-- Facultatif --</option>
+        <option value="dÃ©butant">DÃ©butant</option>
+        <option value="intermÃ©diaire">IntermÃ©diaire</option>
+        <option value="avancÃ©">AvancÃ©</option>
+    </select>
+
+    <label for="price">Prix (â‚¬) :</label>
+    <input type="number" id="price" name="price" step="0.01" required>
+
+    <label for="picture">Image (facultatif) :</label>
+    <input type="file" id="picture" name="picture" accept="image/*">
+
+    <button type="submit">Ajouter le service</button>
+</form>
+
+{% endblock %}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\index.html -----
+{% extends "layout.html" %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+{% endblock %}
+
+{% block content %}
+    <section class="hero-section">
+        <div class="hero-content">
+            <h1 class="title">Bienvenue sur <span class="highlight">CarbonIQ</span></h1>
+            <p class="intro">
+                GÃ©rez votre consommation d'IA, rÃ©duisez votre empreinte carbone et optimisez vos coÃ»ts cloud grÃ¢ce Ã  des services Ã©thiques et personnalisÃ©s.
+            </p>
+            <a href="{{ url_for('main.services') }}" class="view-products-link">Voir tous nos services</a>
+        </div>
+    </section>
+
+    <section class="services-highlight">
+        <div class="product-container">
+            <div class="product">
+                <img src="{{ url_for('static', filename='images/img_1.png') }}" alt="Analyse de consommation IA">
+                <h3>Analyse de consommation</h3>
+                <p>Recevez un rapport clair sur votre utilisation actuelle de lâ€™IA et ses impacts.</p>
+            </div>
+            <div class="product">
+                <img src="{{ url_for('static', filename='images/img_2.png') }}" alt="Optimisation IA">
+                <h3>Optimisation IA</h3>
+                <p>RÃ©duisez vos coÃ»ts et votre pollution numÃ©rique grÃ¢ce Ã  nos recommandations ciblÃ©es.</p>
+            </div>
+            <div class="product">
+                <img src="{{ url_for('static', filename='images/img_3.png') }}" alt="Accompagnement">
+                <h3>Accompagnement personnalisÃ©</h3>
+                <p>Un expert vous guide pour une stratÃ©gie IA plus responsable et rentable.</p>
+            </div>
+        </div>
+
+        <p class="closing">
+            Nos services s'adressent aussi bien aux entreprises qu'aux particuliers. Rejoignez une IA plus durable et maÃ®trisÃ©e.
+        </p>
+    </section>
+
+    <!-- Chatbot -->
+    <button id="toggle-chat" onclick="toggleChat()">ðŸ’¬</button>
+
+    <div id="chat-container">
+        <div id="chat-header">
+            <h4>Assistant IA Responsable</h4>
+            <button id="reset-chat" title="RÃ©initialiser" onclick="resetChat()">â†º</button>
+        </div>
+        <div id="chat-log"></div>
+        <div class="chat-input-group">
+            <input type="text" id="user-input" placeholder="Posez une question..." autocomplete="off">
+            <button onclick="sendMessage()">Envoyer</button>
+        </div>
+    </div>
+{% endblock %}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\layout.html -----
+<!-- layout.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Eco Services{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- Navbar -->
+    <header>
+        <div class="navbar">
+            <div class="logo">
+                <a href="{{ url_for('main.index') }}">ðŸŒ±CarbonIQ</a>
+            </div>
+            <nav class="nav-links">
+                <a href="{{ url_for('main.services') }}">Services</a>
+                <a href="{{ url_for('panier.view_cart') }}">Panier</a>
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('account.account') }}">Compte</a>
+                    {% if current_user.is_admin() %}
+                        <a href="{{ url_for('main.add_service') }}">ajouter services</a>
+                    {% endif %}
+                    <a href="{{ url_for('auth.logout') }}">dÃ©connexion</a>
+                {% else %}
+                    <a href="{{ url_for('auth.login') }}">connexion</a>
+                    <a href="{{ url_for('auth.register') }}">inscription</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2025 CarbonIQ | <a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a></p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='JavaScript/chatbot.js') }}"></script>
+</body>
+</html>
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\login.html -----
+{% extends "layout.html" %}
+
+{% block title %}Connexion{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="title">Connexion Ã  votre espace</h2>
+
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+        <li class="flash-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+<form action="{{ url_for('auth.login') }}" method="POST">
+    <label for="username">Nom d'utilisateur :</label>
+    <input type="text" id="username" name="username" autocomplete="username" required>
+
+    <label for="password">Mot de passe :</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+    <button type="submit">Se connecter</button>
+</form>
+<p>Pas encore de compte ? <a href="{{ url_for('auth.register') }}">CrÃ©er un compte</a>.</p>
+{% endblock %}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\panier.html -----
+{% extends "layout.html" %}
+
+{% block title %}Votre panier{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='cart.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="cart-container">
+    <h1>ðŸ§¾ Vos services sÃ©lectionnÃ©s</h1>
+
+    {% if cart.items %}
+        <ul class="cart-list">
+            {% for item in cart.items %}
+            <li class="cart-item">
+                <span class="product-name">{{ item.service.nom_service }}</span>
+                <span class="quantity">QuantitÃ© : {{ item.quantity }}</span>
+                <form action="{{ url_for('panier.remove_from_cart', item_id=item.id) }}" method="post" style="display:inline;">
+                    <button type="submit" class="remove-button">Supprimer</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="empty-cart">Votre panier est vide.</p>
+    {% endif %}
+
+    <a href="{{ url_for('main.services') }}" class="continue-shopping">â† Voir d'autres services</a>
+</div>
+{% endblock %}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\register.html -----
+{% extends "layout.html" %}
+
+{% block title %}CrÃ©er un compte{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='register.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="title">CrÃ©er votre compte</h2>
+
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+        <li class="flash-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+<form action="{{ url_for('auth.register') }}" method="POST">
+    <label for="username">Nom d'utilisateur :</label>
+    <input type="text" id="username" name="username" autocomplete="username" required>
+
+    <label for="password">Mot de passe :</label>
+    <input type="password" id="password" name="password" autocomplete="new-password" required>
+
+    <button type="submit">CrÃ©er mon compte</button>
+</form>
+<p>Vous avez dÃ©jÃ  un compte ? <a href="{{ url_for('auth.login') }}">Connectez-vous ici</a>.</p>
+{% endblock %}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\templates\services.html -----
+<!-- services.html -->
+{% extends "layout.html" %}
+
+{% block title %}Nos Services{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='productStyle.css') }}">
+{% endblock %}
+
+{% block content %}
+<h1>Nos Services IA</h1>
+
+<div class="product-grid">
+    {% for service in services %}
+    <div class="product-card">
+        {% if service.picture_path %}
+            <img src="{{ url_for('main.uploaded_file', filename=service.picture_path.replace('\\', '/').split('/')[-1]) }}"
+                 alt="{{ service.nom_service }}"
+                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='images/UnavailableImage.png') }}';">
+        {% else %}
+            <img src="{{ url_for('static', filename='images/UnavailableImage.png') }}" alt="{{ service.nom_service }}">
+        {% endif %}
+
+        <div class="product-info">
+            <h2>{{ service.nom_service }}</h2>
+            <p>{{ service.description }}</p>
+            <p><strong>CatÃ©gorie :</strong> {{ service.categorie }}</p>
+            {% if service.niveau %}
+            <p><strong>Niveau :</strong> {{ service.niveau }}</p>
+            {% endif %}
+            <p><strong>Prix :</strong> {{ service.price }} â‚¬</p>
+
+            <form action="{{ url_for('panier.add_to_cart', service_id=service.id_service) }}" method="post">
+                <button type="submit" class="add-to-cart-button">Ajouter ce service</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\app.py -----
+# app.py
+from flask import Flask, request, jsonify, session
+from flask_login import LoginManager, current_user
+from models import db
+from models.db import User
+from core.config import Config
+import requests
+
+
+from routes.account import bp as account_bp
+from routes.auth import bp as auth_bp
+from routes.main import bp as main_bp
+from routes.panier import bp as panier_bp
+from routes.chatbot import bp as chatbot_bp
+
+print(f"ðŸ“ SQLITE PATH: {Config.SQLALCHEMY_DATABASE_URI}")
+# CrÃ©er et configurer l'application Flask
+app = Flask(__name__)
+app.config.from_object(Config)
+
+# Initialiser SQLAlchemy avec l'application
+db.init_app(app)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'
+
+# DÃ©finir la clÃ© API OpenAI #### ajout
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+app.register_blueprint(account_bp)
+app.register_blueprint(auth_bp)
+app.register_blueprint(main_bp)
+app.register_blueprint(panier_bp)
+app.register_blueprint(chatbot_bp)
+
+
+def create_db():
+    """CrÃ©er la base de donnÃ©es et les tables si elles n'existent pas dÃ©jÃ """
+    with app.app_context():
+        db.create_all()
+
+@app.route("/session_data")
+def session_data():
+    return str(session)
+
+
+if __name__ == '__main__':
+    create_db()  # CrÃ©er la base de donnÃ©es avant de lancer l'app si elle existe pas
+    app.run(debug=True)
+
+#
+
+# ----- C:\Users\benoi\flask_IT_Green_project-main(1)\flask_IT_Green_project-main\flaskApp\__init__.py -----
+

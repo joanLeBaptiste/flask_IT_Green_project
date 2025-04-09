@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+
+{% block title %}Ajouter un Service{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="title">Ajouter un service</h2>
+
+<form action="{{ url_for('main.add_service') }}" method="POST" enctype="multipart/form-data" class="add-service-form">
+    <label for="nom_service">Nom du service :</label>
+    <input type="text" id="nom_service" name="nom_service" required>
+
+    <label for="description">Description :</label>
+    <textarea id="description" name="description" required></textarea>
+
+    <label for="categorie">Catégorie :</label>
+    <input type="text" id="categorie" name="categorie" required>
+
+    <label for="niveau">Niveau :</label>
+    <select id="niveau" name="niveau">
+        <option value="">-- Facultatif --</option>
+        <option value="débutant">Débutant</option>
+        <option value="intermédiaire">Intermédiaire</option>
+        <option value="avancé">Avancé</option>
+    </select>
+
+    <label for="price">Prix (€) :</label>
+    <input type="number" id="price" name="price" step="0.01" required>
+
+    <label for="picture">Image (facultatif) :</label>
+    <input type="file" id="picture" name="picture" accept="image/*">
+
+    <button type="submit">Ajouter le service</button>
+</form>
+
+{% endblock %}

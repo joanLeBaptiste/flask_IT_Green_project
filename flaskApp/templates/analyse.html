@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block title %}Analyse de consommation{% endblock %}
+{% block head %}
+    <style>
+        .analyse-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 40px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+        .analyse-container h2 {
+            text-align: center;
+            color: #1e3a8a;
+            margin-bottom: 20px;
+        }
+        .analyse-container label {
+            font-weight: 500;
+            display: block;
+            margin: 15px 0 5px;
+        }
+        .analyse-container select, .analyse-container input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+        }
+        .analyse-container button {
+            margin-top: 20px;
+            width: 100%;
+            background-color: #22c55e;
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #e0fce7;
+            color: #065f46;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 600;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="analyse-container">
+    <h2>Estimation d'émission de CO₂</h2>
+    <form method="POST">
+        <label for="modele">Modèle IA :</label>
+        <select name="modele" id="modele" required>
+            {% for m in models %}
+            <option value="{{ m }}">{{ m }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="type_requete">Type de requête :</label>
+        <select name="type_requete" id="type_requete" required>
+            {% for t in types %}
+            <option value="{{ t }}">{{ t }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="quantite">Quantité :</label>
+        <input type="number" name="quantite" id="quantite" min="1" required>
+
+        <button type="submit">Calculer</button>
+    </form>
+
+    {% if result is not none %}
+    <div class="result">
+        🌍 Estimation : {{ result }} grammes de CO₂ émis.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

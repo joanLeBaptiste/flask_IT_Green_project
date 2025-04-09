@@ -1,0 +1,70 @@
+/* ===== FORMULAIRE D'AJOUT DE SERVICE (admin) ===== */
+form.add-service-form {
+    max-width: 600px;
+    margin: 50px auto;
+    padding: 35px;
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+form.add-service-form label {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1f2937;
+}
+
+form.add-service-form input,
+form.add-service-form textarea,
+form.add-service-form select {
+    padding: 12px;
+    font-size: 15px;
+    border-radius: 10px;
+    border: 1.5px solid #d1d5db;
+    transition: all 0.2s ease-in-out;
+}
+
+form.add-service-form input:focus,
+form.add-service-form textarea:focus,
+form.add-service-form select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+form.add-service-form textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+form.add-service-form input[type="file"] {
+    border: none;
+    padding-left: 0;
+}
+
+form.add-service-form button {
+    background-color: #10b981;
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s ease;
+}
+
+form.add-service-form button:hover {
+    background-color: #059669;
+    transform: scale(1.02);
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}

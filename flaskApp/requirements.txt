@@ -1,0 +1,9 @@
+flask
+requests
+Flask-SQLAlchemy
+flask-login
+python-dotenv
+Flask-Migrate
+werkzeug
+requests
+openai

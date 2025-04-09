@@ -1,0 +1,40 @@
+<!-- services.html -->
+{% extends "layout.html" %}
+
+{% block title %}Nos Services{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+{% endblock %}
+
+{% block content %}
+<h1>Nos Services IA</h1>
+
+<div class="product-grid">
+    {% for service in services %}
+    <div class="product-card">
+        {% if service.picture_path %}
+            <img src="{{ url_for('main.uploaded_file', filename=service.picture_path.replace('\\', '/').split('/')[-1]) }}"
+                 alt="{{ service.nom_service }}"
+                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='images/UnavailableImage.png') }}';">
+        {% else %}
+            <img src="{{ url_for('static', filename='images/UnavailableImage.png') }}" alt="{{ service.nom_service }}">
+        {% endif %}
+
+        <div class="product-info">
+            <h2>{{ service.nom_service }}</h2>
+            <p>{{ service.description }}</p>
+            <p><strong>Catégorie :</strong> {{ service.categorie }}</p>
+            {% if service.niveau %}
+            <p><strong>Niveau :</strong> {{ service.niveau }}</p>
+            {% endif %}
+            <p><strong>Prix :</strong> {{ service.price }} €</p>
+
+            <form action="{{ url_for('panier.add_to_cart', service_id=service.id_service) }}" method="post">
+                <button type="submit" class="add-to-cart-button">Ajouter ce service</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

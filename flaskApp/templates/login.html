@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+
+{% block title %}Connexion{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="title">Connexion à votre espace</h2>
+
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+        <li class="flash-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+<form action="{{ url_for('auth.login') }}" method="POST">
+    <label for="username">Nom d'utilisateur :</label>
+    <input type="text" id="username" name="username" autocomplete="username" required>
+
+    <label for="password">Mot de passe :</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+    <button type="submit">Se connecter</button>
+</form>
+<p>Pas encore de compte ? <a href="{{ url_for('auth.register') }}">Créer un compte</a>.</p>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+
+{% block title %}Sensibilisation à l'empreinte carbone de l'IA{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hero-section">
+    <div class="hero-content">
+        <h1 class="title">Pourquoi l’IA doit aussi être responsable ?</h1>
+        <p class="intro">
+            Découvrez les impacts invisibles de l’intelligence artificielle sur notre planète. Chaque requête, chaque modèle a un coût énergétique.
+        </p>
+    </div>
+</section>
+
+<section class="main-content" style="padding: 40px 20px;">
+    <div style="max-width: 800px; margin: auto; text-align: center;">
+        <h2>🌍 Regardez cette courte vidéo</h2>
+        <p style="margin-bottom: 20px;">
+            En quelques minutes, cette vidéo vous aidera à mieux comprendre pourquoi il est essentiel de développer une IA plus verte.
+        </p>
+        <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <iframe 
+                src="https://www.youtube.com/embed/l_keGVGbMfA" 
+                title="Sensibilisation à l'empreinte carbone de l'IA" 
+                allowfullscreen 
+                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;">
+            </iframe>
+        </div>
+    </div>
+</section>
+{% endblock %}

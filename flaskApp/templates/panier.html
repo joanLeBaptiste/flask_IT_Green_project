@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block title %}Votre panier{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="cart-container">
+    <h1>🧾 Vos services sélectionnés</h1>
+
+    {% if cart.items %}
+        <ul class="cart-list">
+            {% for item in cart.items %}
+            <li class="cart-item">
+                <span class="product-name">{{ item.service.nom_service }}</span>
+                <span class="quantity">Quantité : {{ item.quantity }}</span>
+                <form action="{{ url_for('panier.remove_from_cart', item_id=item.id) }}" method="post" style="display:inline;">
+                    <button type="submit" class="remove-button">Supprimer</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="empty-cart">Votre panier est vide.</p>
+    {% endif %}
+
+    <a href="{{ url_for('main.services') }}" class="continue-shopping">← Voir d'autres services</a>
+</div>
+{% endblock %}

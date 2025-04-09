@@ -1,0 +1,53 @@
+<!-- layout.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Eco Services{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="page-container">
+        <!-- Navbar -->
+        <header>
+            <div class="navbar">
+                <div class="logo">
+                    <a href="{{ url_for('main.index') }}">🌱CarbonIQ</a>
+                </div>
+                <nav class="nav-links">
+                    <a href="{{ url_for('main.services') }}">SERVICES</a>
+                    <a href="{{ url_for('main.sensibilisation') }}">SENSIBILISATION</a> <!-- 🔥 Ajout ici -->
+                    <a href="{{ url_for('panier.view_cart') }}">PANIER</a>
+                    {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('account.account') }}">COMPTE</a>
+                        {% if current_user.is_admin() %}
+                            <a href="{{ url_for('main.add_service') }}">AJOUTER SERVICE</a>
+                        {% endif %}
+                        <a href="{{ url_for('auth.logout') }}">DECONNEXION</a>
+                    {% else %}
+                        <a href="{{ url_for('auth.login') }}">CONNEXION</a>
+                        <a href="{{ url_for('auth.register') }}">INSCRIPTION</a>
+                    {% endif %}
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer>
+            <p>&copy; 2025 CarbonIQ |
+                <a href="{{ url_for('main.privacy') }}">Politique de confidentialité</a> |
+                <a href="#">Conditions d'utilisation</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='JavaScript/chatbot.js') }}"></script>
+</body>
+</html>

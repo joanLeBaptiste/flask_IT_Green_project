@@ -1,0 +1,51 @@
+conn = sqlite3.connect('RasaProject.db')
+    cursor = conn.cursor()
+
+    # Requête pour supprimer la table produit si elle existe déjà
+    cursor.execute("DROP TABLE IF EXISTS produit")
+
+    # Requête pour créer la table produit
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS produit (
+          id_produit INTEGER PRIMARY KEY AUTOINCREMENT,
+          nom_produit VARCHAR(100) NOT NULL,
+          description_produit VARCHAR(300) NOT NULL,
+          picture VARCHAR(300) NOT NULL,
+          catégorie VARCHAR(250) NOT NULL,
+          quantité INTEGER DEFAULT NULL
+        )
+    """)
+
+    # Requête pour insérer des données dans la table produit
+    produits = [
+        (61, 'Réplique de La Joconde', 'Réplique fidèle de la célèbre peinture de Leonardo da Vinci, La Joconde.',
+         'Replique la joconde.jpg', 'Reproduction d\'œuvre d\'art', None),
+        (62, 'Buste de David', 'Sculpture en plâtre représentant le buste de David de Michel-Ange.',
+         'Buste de david.jpg', 'Sculpture en plâtre', None),
+        (63, 'Impression sur toile des Nymphéas', 'Impression sur toile des célèbres Nymphéas de Claude Monet.',
+         'Impression sur toile des Nymphéas.jpg', 'Impression artistique', None),
+        (64, 'Miniature de la Tour Eiffel en métal', 'Miniature détaillée de la Tour Eiffel en métal.',
+         'Miniature de la Tour Eiffel en métal.webp', 'Souvenir', None),
+        (65, 'Poster de La Nuit étoilée',
+         'Poster de grande qualité représentant la célèbre peinture de Vincent van Gogh, La Nuit étoilée.',
+         'Poster de la nuit étoilée.jpg', 'Posters et reproductions', None),
+        (66, 'Réplique de la Statue de la Liberté', 'Réplique en résine de la Statue de la Liberté.',
+         'Réplique de la Statue de la Liberté.jpg', 'Reproduction d\'œuvre d\'art', None),
+        (67, 'Porte-clés Les Tournesols',
+         'Porte-clés avec un médaillon représentant Les Tournesols de Vincent van Gogh.',
+         'Porte-clés Les Tournesols.webp', 'Accessoires', None),
+        (68, 'T-shirt La Cène', 'T-shirt noir avec une impression de La Cène de Leonardo da Vinci.',
+         'T-shirt la Céne.jpg', 'Vêtements', None),
+        (69, 'Mug Les Demoiselles d\'Avignon',
+         'Mug en céramique avec une reproduction des Demoiselles d\'Avignon de Pablo Picasso.',
+         'Mug les demoiselles d\'Avignon.jpg', 'Cadeaux', None),
+        (70, 'Livre d\'art sur les sculptures grecques',
+         'Livre richement illustré présentant les sculptures grecques les plus célèbres.',
+         'Livre d\'art sur les sculptures grecques.jpg', 'Livres d\'art', None)
+    ]
+
+    cursor.executemany("INSERT INTO produit VALUES (?, ?, ?, ?, ?, ?)", produits)
+
+    # Valider la transaction et fermer la connexion
+    conn.commit()
+    conn.close()

@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+
+{% block title %}Créer un compte{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2 class="title">Créer votre compte</h2>
+
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+        <li class="flash-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+<form action="{{ url_for('auth.register') }}" method="POST">
+    <label for="username">Nom d'utilisateur :</label>
+    <input type="text" id="username" name="username" autocomplete="username" required>
+
+    <label for="password">Mot de passe :</label>
+    <input type="password" id="password" name="password" autocomplete="new-password" required>
+
+    <button type="submit">Créer mon compte</button>
+</form>
+<p>Vous avez déjà un compte ? <a href="{{ url_for('auth.login') }}">Connectez-vous ici</a>.</p>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='eco_theme.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="hero-section">
+    <div class="hero-content">
+        <h1 class="title">Bienvenue sur <span class="highlight">CarbonIQ</span></h1>
+        <p class="intro">
+            Gérez votre consommation d'IA, réduisez votre empreinte carbone et optimisez vos coûts cloud grâce à des services éthiques et personnalisés.
+        </p>
+        <a href="{{ url_for('main.services') }}" class="view-products-link">Voir tous nos services</a>
+    </div>
+</section>
+
+<section class="services-highlight">
+    <div class="product-container">
+        <!-- 1. Analyse de consommation (cliquable vers page analyse) -->
+        <a href="{{ url_for('analyse.analyse') }}" class="product" style="text-decoration: none; color: inherit;">
+            <img src="{{ url_for('static', filename='images/img_1.png') }}" alt="Analyse de consommation IA">
+            <h3>Analyse de consommation</h3>
+            <p>Recevez un rapport clair sur votre utilisation actuelle de l’IA et ses impacts.</p>
+        </a>
+
+        <!-- 2. Optimisation IA -->
+        <a href="{{ url_for('main.sensibilisation') }}" class="product" style="text-decoration: none; color: inherit;">
+            <img src="{{ url_for('static', filename='images/img_2.png') }}" alt="Sensibilisation IA">
+            <h3>Sensibilisation IA</h3>
+            <p>Découvrez l'impact environnemental des IA grâce à notre vidéo éducative.</p>
+        </a>
+
+        <!-- 3. Accompagnement personnalisé -->
+        <div class="product">
+            <img src="{{ url_for('static', filename='images/img_3.png') }}" alt="Accompagnement">
+            <h3>Accompagnement personnalisé</h3>
+            <p>Un expert vous guide pour une stratégie IA plus responsable et rentable.</p>
+        </div>
+    </div>
+
+    <p class="closing">
+        Nos services s'adressent aussi bien aux entreprises qu'aux particuliers. Rejoignez une IA plus durable et maîtrisée.
+    </p>
+</section>
+
+<!-- Chatbot -->
+<button id="toggle-chat" onclick="toggleChat()">💬</button>
+
+<div id="chat-container">
+    <div id="chat-header">
+        <h4>Assistant IA Responsable</h4>
+        <button id="reset-chat" title="Réinitialiser" onclick="resetChat()">↺</button>
+    </div>
+    <div id="chat-log"></div>
+    <div class="chat-input-group">
+        <input type="text" id="user-input" placeholder="Posez une question..." autocomplete="off">
+        <button onclick="sendMessage()">Envoyer</button>
+    </div>
+</div>
+{% endblock %}
